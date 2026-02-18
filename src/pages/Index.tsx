@@ -1,14 +1,419 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { useEffect, useRef, useState, useCallback } from "react";
+import { useCamera } from "@/hooks/useCamera";
+import { useTTS } from "@/hooks/useTTS";
+import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useHaptics } from "@/hooks/useHaptics";
 
-const Index = () => {
+type AppState =
+  | "init"
+  | "countdown"
+  | "capturing"
+  | "analyzing"
+  | "result"
+  | "listening"
+  | "error";
+
+interface OutfitAnalysis {
+  上身: string;
+  下身: string;
+  顏色: string;
+  風格: string;
+  正式程度: string;
+  配搭評分: string;
+  建議: string;
+}
+
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+
+const CANTONESE_NUMBERS = ["五", "四", "三", "二", "一"];
+
+function analysisToSpeech(a: OutfitAnalysis): string {
+  return `你而家著緊${a.上身}，同${a.下身}。主要顏色係${a.顏色}。整體風格${a.風格}，${a.正式程度}風格。配搭評分${a.配搭評分}。${a.建議}`;
+}
+
+export default function Index() {
+  const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
+  const { speak, stop: stopSpeech, isSpeaking } = useTTS();
+  const haptics = useHaptics();
+
+  const [appState, setAppState] = useState<AppState>("init");
+  const [countdown, setCountdown] = useState<number | null>(null);
+  const [statusText, setStatusText] = useState("正在啟動相機…");
+  const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [ttsRate, setTtsRate] = useState(1.0);
+  const [lastResult, setLastResult] = useState<string>("");
+
+  const hasShownPrivacy = useRef(false);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Voice command handler
+  const handleVoiceCommand = useCallback(
+    (transcript: string) => {
+      console.log("Voice command:", transcript);
+
+      if (transcript.includes("停止")) {
+        stopSpeech();
+        return;
+      }
+      if (transcript.includes("重複") && lastResult) {
+        speak(lastResult, ttsRate);
+        return;
+      }
+      if (transcript.includes("講慢啲")) {
+        setTtsRate(0.7);
+        speak(lastResult || "速度已調慢。", 0.7);
+        return;
+      }
+      if (
+        transcript.includes("分析我嘅穿搭") ||
+        transcript.includes("再試一次") ||
+        transcript.includes("再試")
+      ) {
+        startFlow();
+        return;
+      }
+      // Follow-up questions
+      if (
+        transcript.includes("見工") ||
+        transcript.includes("婚禮") ||
+        transcript.includes("鞋") ||
+        transcript.includes("適唔適合") ||
+        transcript.includes("應該")
+      ) {
+        handleFollowUp(transcript);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lastResult, ttsRate, analysis]
+  );
+
+  const { startListening, stopListening, supported: speechSupported } =
+    useSpeechRecognition(handleVoiceCommand);
+
+  const startFlow = useCallback(() => {
+    if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+    stopSpeech();
+    setAppState("countdown");
+    setAnalysis(null);
+    setErrorMsg(null);
+    setStatusText("五秒後拍照");
+    speak("相機已啟動，五秒後拍照。");
+    haptics.onCameraActive();
+
+    let count = 5;
+    setCountdown(count);
+    countdownTimerRef.current = setInterval(() => {
+      count -= 1;
+      setCountdown(count);
+      if (count <= 0) {
+        clearInterval(countdownTimerRef.current!);
+        setCountdown(null);
+        doCapture();
+      } else {
+        speak(CANTONESE_NUMBERS[5 - count] || String(count));
+      }
+    }, 1000);
+  }, [speak, stopSpeech, haptics]);
+
+  const doCapture = useCallback(async () => {
+    setAppState("capturing");
+    setStatusText("正在拍照…");
+    haptics.onPhotoTaken();
+
+    const base64 = capturePhoto();
+    if (!base64) {
+      setErrorMsg("無法拍攝照片，請再試一次。");
+      setAppState("error");
+      speak("無法拍攝照片，請再試一次。");
+      return;
+    }
+
+    setAppState("analyzing");
+    setStatusText("分析緊…");
+    haptics.onAnalysisStart();
+    speak("分析緊，請稍候。");
+
+    try {
+      const res = await fetch(`${SUPABASE_URL}/functions/v1/analyze-outfit`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+        },
+        body: JSON.stringify({ imageBase64: base64 }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "分析失敗");
+      }
+
+      const result: OutfitAnalysis = data.analysis;
+      setAnalysis(result);
+      setAppState("result");
+      setStatusText("分析完成");
+
+      const speechText = analysisToSpeech(result);
+      setLastResult(speechText);
+      haptics.onSpeechStart();
+      speak(speechText, ttsRate, () => {
+        setAppState("listening");
+        setStatusText("講出你嘅問題…");
+        startListening();
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "分析失敗，請再試一次。";
+      setErrorMsg(msg);
+      setAppState("error");
+      speak("分析失敗，請再試一次。");
+    }
+  }, [capturePhoto, speak, haptics, ttsRate, startListening]);
+
+  const handleFollowUp = useCallback(
+    async (question: string) => {
+      stopSpeech();
+      setStatusText("搜尋答案緊…");
+      speak("好，等我諗下。");
+
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/followup-question`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ analysis, question }),
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || data.error) {
+          throw new Error(data.error || "處理失敗");
+        }
+
+        const answer: string = data.answer;
+        setLastResult(answer);
+        setStatusText("分析完成");
+        haptics.onSpeechStart();
+        speak(answer, ttsRate);
+      } catch {
+        speak("唔好意思，未能回答呢個問題，請再試一次。");
+      }
+    },
+    [analysis, speak, stopSpeech, haptics, ttsRate]
+  );
+
+  // Boot sequence
+  useEffect(() => {
+    const boot = async () => {
+      // Privacy notice (first launch only)
+      if (!hasShownPrivacy.current) {
+        const seen = localStorage.getItem("vw_privacy_seen");
+        if (!seen) {
+          speak(
+            "你嘅相片只會用作穿搭分析，系統唔會儲存或分享。",
+            1.0,
+            async () => {
+              localStorage.setItem("vw_privacy_seen", "1");
+              await initCamera();
+            }
+          );
+          hasShownPrivacy.current = true;
+          return;
+        }
+      }
+      await initCamera();
+    };
+
+    const initCamera = async () => {
+      setStatusText("正在啟動相機…");
+      const ok = await startCamera();
+      if (ok) {
+        startFlow();
+      } else {
+        setAppState("error");
+        setStatusText("無法開啟相機");
+        speak("無法開啟相機，請檢查權限。");
+      }
+    };
+
+    // Short delay to let voices load
+    const t = setTimeout(boot, 600);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Cleanup
+  useEffect(() => {
+    return () => {
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
+      stopListening();
+    };
+  }, [stopListening]);
+
+  const stateColor: Record<AppState, string> = {
+    init: "text-white",
+    countdown: "glow-white text-white",
+    capturing: "text-white",
+    analyzing: "text-accent glow-gold",
+    result: "text-white",
+    listening: "text-[hsl(var(--listening))]",
+    error: "text-destructive",
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <div
+      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden"
+      style={{ background: "hsl(var(--deep-blue-dark))" }}
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      {/* Camera feed — always in background */}
+      <video
+        ref={videoRef}
+        className="absolute inset-0 w-full h-full object-cover opacity-30"
+        playsInline
+        muted
+        aria-hidden="true"
+      />
+
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-background/70" />
+
+      {/* Top bar */}
+      <div className="relative z-10 w-full flex items-center justify-between px-6 pt-safe pt-6">
+        <span className="text-2xl font-bold tracking-widest text-white text-shadow-lg">聲著</span>
+        <span className="text-sm text-muted-foreground">VoiceWear</span>
       </div>
+
+      {/* Main content */}
+      <div className="relative z-10 flex flex-col items-center justify-center flex-1 px-6 w-full max-w-lg">
+        {/* Countdown */}
+        {countdown !== null && (
+          <div
+            key={countdown}
+            className="countdown-pulse text-[clamp(120px,30vw,180px)] font-black text-white glow-white leading-none mb-4"
+            aria-label={`倒數 ${countdown}`}
+          >
+            {countdown}
+          </div>
+        )}
+
+        {/* Status text */}
+        <p
+          className={`text-[clamp(28px,6vw,40px)] font-semibold text-center text-shadow-lg leading-tight mb-6 ${stateColor[appState] || "text-white"}`}
+        >
+          {statusText}
+        </p>
+
+        {/* Listening indicator */}
+        {appState === "listening" && (
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-4 h-4 rounded-full bg-[hsl(var(--listening))] pulse-listening" />
+            <span className="text-xl text-[hsl(var(--listening))]">正在聆聽…</span>
+          </div>
+        )}
+
+        {/* Analyzing indicator */}
+        {appState === "analyzing" && (
+          <div className="flex items-center gap-2 mb-4">
+            {[0, 1, 2].map((i) => (
+              <div
+                key={i}
+                className="w-3 h-3 rounded-full bg-accent"
+                style={{ animation: `pulseListening 1.2s ${i * 0.3}s ease-in-out infinite` }}
+              />
+            ))}
+          </div>
+        )}
+
+        {/* Analysis result cards */}
+        {analysis && (appState === "result" || appState === "listening") && (
+          <div className="w-full space-y-3 mt-2">
+            <div className="rounded-xl border border-border/50 bg-card/60 p-4 backdrop-blur">
+              <div className="grid grid-cols-2 gap-3 text-lg">
+                <ResultItem label="上身" value={analysis.上身} />
+                <ResultItem label="下身" value={analysis.下身} />
+                <ResultItem label="顏色" value={analysis.顏色} />
+                <ResultItem label="風格" value={analysis.風格} />
+                <ResultItem label="正式程度" value={analysis.正式程度} />
+                <ResultItem label="評分" value={analysis.配搭評分} highlight />
+              </div>
+              <div className="mt-3 pt-3 border-t border-border/30">
+                <p className="text-sm text-muted-foreground mb-1">建議</p>
+                <p className="text-base text-foreground leading-relaxed">{analysis.建議}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Error state */}
+        {appState === "error" && errorMsg && (
+          <div className="rounded-xl bg-destructive/20 border border-destructive/50 p-5 text-center">
+            <p className="text-destructive text-xl">{errorMsg}</p>
+            <p className="text-muted-foreground text-base mt-2">說「再試一次」重新開始</p>
+          </div>
+        )}
+      </div>
+
+      {/* Bottom voice commands hint */}
+      <div className="relative z-10 w-full px-6 pb-safe pb-8">
+        {appState === "listening" && (
+          <div className="rounded-xl bg-muted/40 backdrop-blur p-4">
+            <p className="text-muted-foreground text-base text-center mb-2">可以說：</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              {["「重複」", "「講慢啲」", "「再試一次」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
+                <span key={cmd} className="text-sm text-foreground bg-secondary/60 rounded-full px-3 py-1">
+                  {cmd}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        {!speechSupported && (
+          <p className="text-center text-muted-foreground text-sm">
+            此瀏覽器不支援語音識別，請使用 Chrome
+          </p>
+        )}
+      </div>
+
+      {/* Speaking indicator */}
+      {isSpeaking && (
+        <div className="absolute top-16 right-4 z-20 flex items-center gap-1">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="w-1.5 rounded-full bg-accent"
+              style={{
+                height: `${12 + i * 6}px`,
+                animation: `pulseListening 0.8s ${i * 0.15}s ease-in-out infinite`,
+              }}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
-};
+}
 
-export default Index;
+function ResultItem({
+  label,
+  value,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+      <p className={`text-base font-medium ${highlight ? "text-accent glow-gold" : "text-foreground"}`}>
+        {value}
+      </p>
+    </div>
+  );
+}
