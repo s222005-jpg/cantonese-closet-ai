@@ -1,0 +1,7 @@
+project_id = "qyqbpnrjiqwxucbufoim"
+
+[functions.analyze-outfit]
+verify_jwt = false
+
+[functions.followup-question]
+verify_jwt = false
