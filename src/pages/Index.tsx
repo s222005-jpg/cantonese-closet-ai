@@ -39,7 +39,7 @@ export default function Index() {
 
   const [appState, setAppState] = useState<AppState>("init");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState("正在啟動相機…");
+  const [statusText, setStatusText] = useState("撳下面嘅按鈕開始");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
@@ -207,45 +207,29 @@ export default function Index() {
     [analysis, speak, stopSpeech, haptics, ttsRate]
   );
 
-  // Boot sequence
-  useEffect(() => {
-    const boot = async () => {
-      // Privacy notice (first launch only)
-      if (!hasShownPrivacy.current) {
-        const seen = localStorage.getItem("vw_privacy_seen");
-        if (!seen) {
-          speak(
-            "你嘅相片只會用作穿搭分析，系統唔會儲存或分享。",
-            1.0,
-            async () => {
-              localStorage.setItem("vw_privacy_seen", "1");
-              await initCamera();
-            }
-          );
-          hasShownPrivacy.current = true;
-          return;
-        }
+  // User-gesture-driven start — required for camera access on mobile browsers
+  const handleStart = useCallback(async () => {
+    // Privacy notice (first launch only)
+    if (!hasShownPrivacy.current) {
+      const seen = localStorage.getItem("vw_privacy_seen");
+      if (!seen) {
+        localStorage.setItem("vw_privacy_seen", "1");
+        speak("你嘅相片只會用作穿搭分析，系統唔會儲存或分享。");
       }
-      await initCamera();
-    };
+      hasShownPrivacy.current = true;
+    }
 
-    const initCamera = async () => {
-      setStatusText("正在啟動相機…");
-      const ok = await startCamera();
-      if (ok) {
-        startFlow();
-      } else {
-        setAppState("error");
-        setStatusText("無法開啟相機");
-        speak("無法開啟相機，請檢查權限。");
-      }
-    };
-
-    // Short delay to let voices load
-    const t = setTimeout(boot, 600);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+    setStatusText("正在啟動相機…");
+    // getUserMedia called directly inside user click handler
+    const ok = await startCamera();
+    if (ok) {
+      startFlow();
+    } else {
+      setAppState("error");
+      setStatusText("無法開啟相機");
+      speak("無法開啟相機，請檢查權限。");
+    }
+  }, [startCamera, startFlow, speak]);
 
   // Cleanup
   useEffect(() => {
@@ -352,11 +336,27 @@ export default function Index() {
           </div>
         )}
 
+        {/* Init state — big start button */}
+        {appState === "init" && (
+          <button
+            onClick={handleStart}
+            className="mt-4 w-full max-w-xs py-6 rounded-2xl bg-accent text-accent-foreground text-2xl font-bold tracking-wide active:scale-95 transition-transform"
+            aria-label="撳呢度開始分析穿搭"
+          >
+            開始分析穿搭
+          </button>
+        )}
+
         {/* Error state */}
         {appState === "error" && errorMsg && (
           <div className="rounded-xl bg-destructive/20 border border-destructive/50 p-5 text-center">
             <p className="text-destructive text-xl">{errorMsg}</p>
-            <p className="text-muted-foreground text-base mt-2">說「再試一次」重新開始</p>
+            <button
+              onClick={handleStart}
+              className="mt-4 py-3 px-8 rounded-xl bg-accent text-accent-foreground text-lg font-semibold active:scale-95 transition-transform"
+            >
+              再試一次
+            </button>
           </div>
         )}
       </div>
@@ -365,7 +365,13 @@ export default function Index() {
       <div className="relative z-10 w-full px-6 pb-safe pb-8">
         {appState === "listening" && (
           <div className="rounded-xl bg-muted/40 backdrop-blur p-4">
-            <p className="text-muted-foreground text-base text-center mb-2">可以說：</p>
+            <button
+              onClick={handleStart}
+              className="w-full py-4 mb-3 rounded-xl bg-accent text-accent-foreground text-lg font-semibold active:scale-95 transition-transform"
+            >
+              再影多張
+            </button>
+            <p className="text-muted-foreground text-base text-center mb-2">或者講：</p>
             <div className="flex flex-wrap justify-center gap-2">
               {["「重複」", "「講慢啲」", "「再試一次」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
                 <span key={cmd} className="text-sm text-foreground bg-secondary/60 rounded-full px-3 py-1">
