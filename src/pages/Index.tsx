@@ -39,7 +39,7 @@ export default function Index() {
 
   const [appState, setAppState] = useState<AppState>("init");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState("撳下面嘅按鈕開始");
+  const [statusText, setStatusText] = useState("撳下面嘅按鈕開始，或者講「開始」");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
@@ -47,11 +47,31 @@ export default function Index() {
 
   const hasShownPrivacy = useRef(false);
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const cameraStartedRef = useRef(false);
 
-  // Voice command handler
+  // Refs so callbacks always see latest values
+  const appStateRef = useRef<AppState>("init");
+  const startFlowRef = useRef<() => void>(() => {});
+  const handleFollowUpRef = useRef<(q: string) => void>(() => {});
+
+  // Voice command handler — uses refs to avoid stale closures
   const handleVoiceCommand = useCallback(
     (transcript: string) => {
       console.log("Voice command:", transcript);
+
+      // "開始" / "影相" triggers — works from any state where camera is ready
+      if (
+        transcript.includes("開始") ||
+        transcript.includes("影相") ||
+        transcript.includes("分析我嘅穿搭") ||
+        transcript.includes("再試一次") ||
+        transcript.includes("再試")
+      ) {
+        if (cameraStartedRef.current) {
+          startFlowRef.current();
+        }
+        return;
+      }
 
       if (transcript.includes("停止")) {
         stopSpeech();
@@ -66,14 +86,6 @@ export default function Index() {
         speak(lastResult || "速度已調慢。", 0.7);
         return;
       }
-      if (
-        transcript.includes("分析我嘅穿搭") ||
-        transcript.includes("再試一次") ||
-        transcript.includes("再試")
-      ) {
-        startFlow();
-        return;
-      }
       // Follow-up questions
       if (
         transcript.includes("見工") ||
@@ -82,11 +94,11 @@ export default function Index() {
         transcript.includes("適唔適合") ||
         transcript.includes("應該")
       ) {
-        handleFollowUp(transcript);
+        handleFollowUpRef.current(transcript);
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [lastResult, ttsRate, analysis]
+    [lastResult, ttsRate]
   );
 
   const { startListening, stopListening, supported: speechSupported } =
@@ -96,10 +108,11 @@ export default function Index() {
     if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     stopSpeech();
     setAppState("countdown");
+    appStateRef.current = "countdown";
     setAnalysis(null);
     setErrorMsg(null);
     setStatusText("五秒後拍照");
-    speak("相機已啟動，五秒後拍照。");
+    speak("五秒後拍照。");
     haptics.onCameraActive();
 
     let count = 5;
@@ -117,20 +130,28 @@ export default function Index() {
     }, 1000);
   }, [speak, stopSpeech, haptics]);
 
+  // Keep ref in sync
+  useEffect(() => { startFlowRef.current = startFlow; }, [startFlow]);
+
   const doCapture = useCallback(async () => {
     setAppState("capturing");
+    appStateRef.current = "capturing";
     setStatusText("正在拍照…");
     haptics.onPhotoTaken();
 
     const base64 = capturePhoto();
+    console.log("Captured photo, base64 length:", base64?.length ?? 0);
+
     if (!base64) {
       setErrorMsg("無法拍攝照片，請再試一次。");
       setAppState("error");
+      appStateRef.current = "error";
       speak("無法拍攝照片，請再試一次。");
       return;
     }
 
     setAppState("analyzing");
+    appStateRef.current = "analyzing";
     setStatusText("分析緊…");
     haptics.onAnalysisStart();
     speak("分析緊，請稍候。");
@@ -154,21 +175,23 @@ export default function Index() {
       const result: OutfitAnalysis = data.analysis;
       setAnalysis(result);
       setAppState("result");
+      appStateRef.current = "result";
       setStatusText("分析完成");
 
       const speechText = analysisToSpeech(result);
       setLastResult(speechText);
       haptics.onSpeechStart();
       speak(speechText, ttsRate, () => {
-        // After speaking, go to listening mode — do NOT restart the flow
         setAppState("listening");
-        setStatusText("講出你嘅問題，或者講「再試一次」重新分析");
+        appStateRef.current = "listening";
+        setStatusText("講「再試一次」重新分析，或者問問題");
         startListening();
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "分析失敗，請再試一次。";
       setErrorMsg(msg);
       setAppState("error");
+      appStateRef.current = "error";
       speak("分析失敗，請再試一次。");
     }
   }, [capturePhoto, speak, haptics, ttsRate, startListening]);
@@ -207,6 +230,9 @@ export default function Index() {
     [analysis, speak, stopSpeech, haptics, ttsRate]
   );
 
+  // Keep ref in sync
+  useEffect(() => { handleFollowUpRef.current = handleFollowUp; }, [handleFollowUp]);
+
   // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
     // Privacy notice (first launch only)
@@ -219,17 +245,23 @@ export default function Index() {
       hasShownPrivacy.current = true;
     }
 
-    setStatusText("正在啟動相機…");
-    // getUserMedia called directly inside user click handler
-    const ok = await startCamera();
-    if (ok) {
-      startFlow();
-    } else {
-      setAppState("error");
-      setStatusText("無法開啟相機");
-      speak("無法開啟相機，請檢查權限。");
+    // Only start camera if not already active
+    if (!cameraStartedRef.current) {
+      setStatusText("正在啟動相機…");
+      const ok = await startCamera();
+      if (!ok) {
+        setAppState("error");
+        appStateRef.current = "error";
+        setStatusText("無法開啟相機");
+        speak("無法開啟相機，請檢查權限。");
+        return;
+      }
+      cameraStartedRef.current = true;
+      // Also start voice recognition (user gesture covers this too)
+      startListening();
     }
-  }, [startCamera, startFlow, speak]);
+    startFlow();
+  }, [startCamera, startFlow, speak, startListening]);
 
   // Cleanup
   useEffect(() => {
@@ -256,7 +288,7 @@ export default function Index() {
       aria-live="polite"
       aria-atomic="true"
     >
-      {/* Camera feed — visible so it captures real frames */}
+      {/* Camera feed */}
       <video
         ref={videoRef}
         className="absolute inset-0 w-full h-full object-cover opacity-40"
@@ -361,19 +393,19 @@ export default function Index() {
         )}
       </div>
 
-      {/* Bottom voice commands hint */}
+      {/* Bottom area */}
       <div className="relative z-10 w-full px-6 pb-safe pb-8">
         {appState === "listening" && (
           <div className="rounded-xl bg-muted/40 backdrop-blur p-4">
             <button
-              onClick={handleStart}
+              onClick={() => startFlow()}
               className="w-full py-4 mb-3 rounded-xl bg-accent text-accent-foreground text-lg font-semibold active:scale-95 transition-transform"
             >
               再影多張
             </button>
             <p className="text-muted-foreground text-base text-center mb-2">或者講：</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {["「重複」", "「講慢啲」", "「再試一次」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
+              {["「開始」", "「重複」", "「講慢啲」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
                 <span key={cmd} className="text-sm text-foreground bg-secondary/60 rounded-full px-3 py-1">
                   {cmd}
                 </span>
