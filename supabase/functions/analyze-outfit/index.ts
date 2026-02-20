@@ -27,7 +27,8 @@ serve(async (req) => {
     }
 
     const systemPrompt = `你係一位專業時裝分析師，專門分析香港人嘅日常穿搭。
-請用繁體中文（廣東話語氣）分析圖片中的衣著，並以以下 JSON 格式返回結果：
+用戶會畀你一張相片，相片入面有一個人或者一套衣服。
+請仔細睇清楚相片入面嘅衣著，然後以以下 JSON 格式返回結果：
 {
   "上身": "上身衣物種類同顏色描述",
   "下身": "下身衣物種類同顏色描述",
@@ -38,10 +39,20 @@ serve(async (req) => {
   "建議": "正面鼓勵嘅穿搭改善建議"
 }
 請確保：
-1. 所有文字用繁體中文
+1. 所有文字用繁體中文，廣東話口語
 2. 建議語氣要正面鼓勵
 3. 只返回 JSON，唔需要其他說明
-4. 如果睇唔到衣著，配搭評分用 "N/A" 並在建議中說明`;
+4. 你一定要根據相片入面實際見到嘅衣物嚟分析，唔好估或者亂作
+5. 如果真係完全睇唔到任何衣物，先至用 "N/A"`;
+
+    // Clean the base64 - remove any whitespace or data URI prefix
+    let cleanedBase64 = imageBase64.trim();
+    if (cleanedBase64.startsWith("data:")) {
+      cleanedBase64 = cleanedBase64.split(",")[1] || cleanedBase64;
+    }
+    cleanedBase64 = cleanedBase64.replace(/\s/g, "");
+
+    console.log("Image base64 length:", cleanedBase64.length);
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -53,17 +64,21 @@ serve(async (req) => {
         model: "google/gemini-2.5-flash",
         messages: [
           {
+            role: "system",
+            content: systemPrompt,
+          },
+          {
             role: "user",
             content: [
               {
                 type: "image_url",
                 image_url: {
-                  url: `data:image/jpeg;base64,${imageBase64}`,
+                  url: `data:image/jpeg;base64,${cleanedBase64}`,
                 },
               },
               {
                 type: "text",
-                text: systemPrompt,
+                text: "請分析呢張相入面嘅穿搭。",
               },
             ],
           },

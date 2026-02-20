@@ -160,8 +160,9 @@ export default function Index() {
       setLastResult(speechText);
       haptics.onSpeechStart();
       speak(speechText, ttsRate, () => {
+        // After speaking, go to listening mode — do NOT restart the flow
         setAppState("listening");
-        setStatusText("講出你嘅問題…");
+        setStatusText("講出你嘅問題，或者講「再試一次」重新分析");
         startListening();
       });
     } catch (err) {
@@ -271,12 +272,13 @@ export default function Index() {
       aria-live="polite"
       aria-atomic="true"
     >
-      {/* Camera feed — always in background */}
+      {/* Camera feed — visible so it captures real frames */}
       <video
         ref={videoRef}
-        className="absolute inset-0 w-full h-full object-cover opacity-30"
+        className="absolute inset-0 w-full h-full object-cover opacity-40"
         playsInline
         muted
+        autoPlay
         aria-hidden="true"
       />
 
