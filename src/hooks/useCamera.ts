@@ -25,6 +25,15 @@ export function useCamera() {
       streamRef.current = stream;
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
+        // Wait for video metadata to load so dimensions are available
+        await new Promise<void>((resolve) => {
+          const video = videoRef.current!;
+          if (video.readyState >= 2) {
+            resolve();
+          } else {
+            video.onloadeddata = () => resolve();
+          }
+        });
         await videoRef.current.play();
       }
       updateCameraState("active");
@@ -39,14 +48,21 @@ export function useCamera() {
 
   const capturePhoto = useCallback((): string | null => {
     const video = videoRef.current;
-    if (!video || cameraStateRef.current !== "active") return null;
+    if (!video || cameraStateRef.current !== "active") {
+      console.log("capturePhoto: not ready", { video: !!video, state: cameraStateRef.current });
+      return null;
+    }
+    if (video.videoWidth === 0 || video.videoHeight === 0) {
+      console.log("capturePhoto: video dimensions not ready", video.videoWidth, video.videoHeight);
+      return null;
+    }
 
     const canvas = document.createElement("canvas");
-    canvas.width = video.videoWidth || 640;
-    canvas.height = video.videoHeight || 480;
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
-    ctx.drawImage(video, 0, 0);
+    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     return canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
   }, []);
 
