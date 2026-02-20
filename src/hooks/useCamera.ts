@@ -6,10 +6,16 @@ export function useCamera() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const [cameraState, setCameraState] = useState<CameraState>("idle");
+  const cameraStateRef = useRef<CameraState>("idle");
   const [error, setError] = useState<string | null>(null);
 
+  const updateCameraState = useCallback((state: CameraState) => {
+    cameraStateRef.current = state;
+    setCameraState(state);
+  }, []);
+
   const startCamera = useCallback(async () => {
-    setCameraState("requesting");
+    updateCameraState("requesting");
     setError(null);
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -21,19 +27,19 @@ export function useCamera() {
         videoRef.current.srcObject = stream;
         await videoRef.current.play();
       }
-      setCameraState("active");
+      updateCameraState("active");
       return true;
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Camera error";
       setError(msg);
-      setCameraState("error");
+      updateCameraState("error");
       return false;
     }
-  }, []);
+  }, [updateCameraState]);
 
   const capturePhoto = useCallback((): string | null => {
     const video = videoRef.current;
-    if (!video || cameraState !== "active") return null;
+    if (!video || cameraStateRef.current !== "active") return null;
 
     const canvas = document.createElement("canvas");
     canvas.width = video.videoWidth || 640;
@@ -41,17 +47,16 @@ export function useCamera() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return null;
     ctx.drawImage(video, 0, 0);
-    // Return base64 without the data:image/... prefix for API
     return canvas.toDataURL("image/jpeg", 0.85).split(",")[1];
-  }, [cameraState]);
+  }, []);
 
   const stopCamera = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((t) => t.stop());
       streamRef.current = null;
     }
-    setCameraState("idle");
-  }, []);
+    updateCameraState("idle");
+  }, [updateCameraState]);
 
   return { videoRef, cameraState, error, startCamera, capturePhoto, stopCamera };
 }
