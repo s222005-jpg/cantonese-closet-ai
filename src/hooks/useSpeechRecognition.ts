@@ -13,6 +13,7 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
   const recognitionRef = useRef<typeof SpeechRecognition | null>(null);
   const [state, setState] = useState<RecognitionState>("idle");
   const activeRef = useRef(false);
+  const processedIndexRef = useRef(0);
 
   const startListening = useCallback(() => {
     if (!SpeechRecognition) {
@@ -20,6 +21,8 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
       return;
     }
     if (activeRef.current) return;
+
+    processedIndexRef.current = 0;
 
     const recognition = new SpeechRecognition();
     recognition.lang = "zh-HK";
@@ -34,13 +37,14 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
 
     recognition.onresult = (event: SpeechRecognitionEvent) => {
       const results = event.results;
-      for (let i = 0; i < results.length; i++) {
+      for (let i = processedIndexRef.current; i < results.length; i++) {
         const result = results[i];
         if (result && result[0]) {
           const transcript = result[0].transcript.trim();
           if (transcript) onCommand(transcript);
         }
       }
+      processedIndexRef.current = results.length;
     };
 
     recognition.onerror = (event: { error: string }) => {
