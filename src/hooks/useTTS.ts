@@ -85,7 +85,11 @@ export function useTTS() {
   // Cleanup
   useEffect(() => {
     return () => {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {
+        // ignore — some browsers throw during teardown
+      }
       if (resumeTimerRef.current) clearInterval(resumeTimerRef.current);
     };
   }, []);
