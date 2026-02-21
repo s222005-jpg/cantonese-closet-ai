@@ -34,7 +34,7 @@ function analysisToSpeech(a: OutfitAnalysis): string {
 
 export default function Index() {
   const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
-  const { speak, stop: stopSpeech, isSpeaking } = useTTS();
+  const { speak, stop: stopSpeech, isSpeaking, warmUp: warmUpTTS } = useTTS();
   const haptics = useHaptics();
 
   const [appState, setAppState] = useState<AppState>("init");
@@ -235,6 +235,9 @@ export default function Index() {
 
   // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
+    // Unlock TTS on mobile — must happen in user gesture context
+    warmUpTTS();
+
     // Privacy notice (first launch only)
     if (!hasShownPrivacy.current) {
       const seen = localStorage.getItem("vw_privacy_seen");
@@ -261,7 +264,7 @@ export default function Index() {
       startListening();
     }
     startFlow();
-  }, [startCamera, startFlow, speak, startListening]);
+  }, [startCamera, startFlow, speak, startListening, warmUpTTS]);
 
   // Cleanup
   useEffect(() => {

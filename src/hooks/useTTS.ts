@@ -5,6 +5,7 @@ export function useTTS() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const resumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const unlockedRef = useRef(false);
 
   // Load voices — they may arrive asynchronously
   useEffect(() => {
@@ -36,8 +37,29 @@ export function useTTS() {
     }
   }, []);
 
+  // Call this during a user gesture (button click) to unlock TTS on mobile
+  const warmUp = useCallback(() => {
+    if (unlockedRef.current) return;
+    unlockedRef.current = true;
+    // Speak a silent/empty utterance to unlock the audio context
+    const u = new SpeechSynthesisUtterance("");
+    u.volume = 0;
+    u.lang = "zh-HK";
+    try {
+      window.speechSynthesis.speak(u);
+      // Cancel immediately — we just need the gesture association
+      setTimeout(() => window.speechSynthesis.cancel(), 100);
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const speak = useCallback((text: string, rate = 1.0, onEnd?: () => void) => {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
     stopResumeTimer();
 
     const utterance = new SpeechSynthesisUtterance(text);
@@ -68,16 +90,27 @@ export function useTTS() {
       console.warn("TTS error:", e);
       setIsSpeaking(false);
       stopResumeTimer();
+      // Still call onEnd so app doesn't get stuck
       onEnd?.();
     };
 
     utteranceRef.current = utterance;
     setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+    try {
+      window.speechSynthesis.speak(utterance);
+    } catch (err) {
+      console.warn("TTS speak failed:", err);
+      setIsSpeaking(false);
+      onEnd?.();
+    }
   }, [startResumeTimer, stopResumeTimer]);
 
   const stop = useCallback(() => {
-    window.speechSynthesis.cancel();
+    try {
+      window.speechSynthesis.cancel();
+    } catch {
+      // ignore
+    }
     stopResumeTimer();
     setIsSpeaking(false);
   }, [stopResumeTimer]);
@@ -88,11 +121,11 @@ export function useTTS() {
       try {
         window.speechSynthesis.cancel();
       } catch {
-        // ignore — some browsers throw during teardown
+        // ignore
       }
       if (resumeTimerRef.current) clearInterval(resumeTimerRef.current);
     };
   }, []);
 
-  return { speak, stop, isSpeaking };
+  return { speak, stop, isSpeaking, warmUp };
 }
