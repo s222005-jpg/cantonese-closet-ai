@@ -1,7 +1,6 @@
 import { useRef, useCallback, useState, useEffect } from "react";
 
 export function useTTS() {
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
   const voicesRef = useRef<SpeechSynthesisVoice[]>([]);
   const resumeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -19,8 +18,6 @@ export function useTTS() {
     };
   }, []);
 
-  // Chrome mobile bug: speechSynthesis pauses after ~15s.
-  // Workaround: periodically call resume() while speaking.
   const startResumeTimer = useCallback(() => {
     if (resumeTimerRef.current) clearInterval(resumeTimerRef.current);
     resumeTimerRef.current = setInterval(() => {
@@ -37,22 +34,33 @@ export function useTTS() {
     }
   }, []);
 
-  // Call this during a user gesture (button click) to unlock TTS on mobile
+  const getVoice = useCallback(() => {
+    const voices = voicesRef.current.length > 0
+      ? voicesRef.current
+      : window.speechSynthesis.getVoices();
+    return voices.find(
+      (v) => v.lang === "zh-HK" || v.lang === "zh-TW" || v.lang.startsWith("zh")
+    ) || null;
+  }, []);
+
+  // Must be called during user gesture to unlock TTS on iOS/mobile
   const warmUp = useCallback(() => {
     if (unlockedRef.current) return;
     unlockedRef.current = true;
-    // Speak a silent/empty utterance to unlock the audio context
-    const u = new SpeechSynthesisUtterance("");
-    u.volume = 0;
-    u.lang = "zh-HK";
     try {
+      // Speak a space character (not empty string — iOS ignores empty)
+      // with volume 0 so user doesn't hear anything
+      const u = new SpeechSynthesisUtterance(" ");
+      u.volume = 0.01; // near-silent
+      u.lang = "zh-HK";
+      const voice = getVoice();
+      if (voice) u.voice = voice;
       window.speechSynthesis.speak(u);
-      // Cancel immediately — we just need the gesture association
-      setTimeout(() => window.speechSynthesis.cancel(), 100);
+      // Don't cancel — let it finish naturally so the queue stays unlocked
     } catch {
       // ignore
     }
-  }, []);
+  }, [getVoice]);
 
   const speak = useCallback((text: string, rate = 1.0, onEnd?: () => void) => {
     try {
@@ -62,48 +70,43 @@ export function useTTS() {
     }
     stopResumeTimer();
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = "zh-HK";
-    utterance.rate = rate;
-    utterance.pitch = 1.0;
-    utterance.volume = 1.0;
+    // Small delay after cancel to let the engine reset
+    setTimeout(() => {
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "zh-HK";
+      utterance.rate = rate;
+      utterance.pitch = 1.0;
+      utterance.volume = 1.0;
 
-    // Pick a zh-HK / zh-TW voice
-    const voices = voicesRef.current.length > 0
-      ? voicesRef.current
-      : window.speechSynthesis.getVoices();
-    const preferred = voices.find(
-      (v) => v.lang === "zh-HK" || v.lang === "zh-TW" || v.lang.startsWith("zh")
-    );
-    if (preferred) utterance.voice = preferred;
+      const voice = getVoice();
+      if (voice) utterance.voice = voice;
 
-    utterance.onstart = () => {
+      utterance.onstart = () => {
+        setIsSpeaking(true);
+        startResumeTimer();
+      };
+      utterance.onend = () => {
+        setIsSpeaking(false);
+        stopResumeTimer();
+        onEnd?.();
+      };
+      utterance.onerror = (e) => {
+        console.warn("TTS error:", e);
+        setIsSpeaking(false);
+        stopResumeTimer();
+        onEnd?.();
+      };
+
       setIsSpeaking(true);
-      startResumeTimer();
-    };
-    utterance.onend = () => {
-      setIsSpeaking(false);
-      stopResumeTimer();
-      onEnd?.();
-    };
-    utterance.onerror = (e) => {
-      console.warn("TTS error:", e);
-      setIsSpeaking(false);
-      stopResumeTimer();
-      // Still call onEnd so app doesn't get stuck
-      onEnd?.();
-    };
-
-    utteranceRef.current = utterance;
-    setIsSpeaking(true);
-    try {
-      window.speechSynthesis.speak(utterance);
-    } catch (err) {
-      console.warn("TTS speak failed:", err);
-      setIsSpeaking(false);
-      onEnd?.();
-    }
-  }, [startResumeTimer, stopResumeTimer]);
+      try {
+        window.speechSynthesis.speak(utterance);
+      } catch (err) {
+        console.warn("TTS speak failed:", err);
+        setIsSpeaking(false);
+        onEnd?.();
+      }
+    }, 50);
+  }, [startResumeTimer, stopResumeTimer, getVoice]);
 
   const stop = useCallback(() => {
     try {
