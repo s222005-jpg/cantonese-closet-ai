@@ -13,14 +13,25 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
   const recognitionRef = useRef<typeof SpeechRecognition | null>(null);
   const [state, setState] = useState<RecognitionState>("idle");
   const activeRef = useRef(false);
+  const wantListeningRef = useRef(false);
   const processedIndexRef = useRef(0);
+  const onCommandRef = useRef(onCommand);
+
+  // Keep callback ref in sync to avoid stale closures
+  useEffect(() => {
+    onCommandRef.current = onCommand;
+  }, [onCommand]);
 
   const startListening = useCallback(() => {
     if (!SpeechRecognition) {
       setState("error");
       return;
     }
-    if (activeRef.current) return;
+    
+    wantListeningRef.current = true;
+    
+    // Already running — skip
+    if (activeRef.current && recognitionRef.current) return;
 
     processedIndexRef.current = 0;
 
@@ -41,7 +52,7 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
         const result = results[i];
         if (result && result[0]) {
           const transcript = result[0].transcript.trim();
-          if (transcript) onCommand(transcript);
+          if (transcript) onCommandRef.current(transcript);
         }
       }
       processedIndexRef.current = results.length;
@@ -49,20 +60,25 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
 
     recognition.onerror = (event: { error: string }) => {
       console.warn("Speech recognition error:", event.error);
-      if (event.error !== "no-speech") {
+      if (event.error === "not-allowed" || event.error === "service-not-allowed") {
         setState("error");
+        wantListeningRef.current = false;
       }
+      // For "no-speech" and "aborted", let onend handle restart
     };
 
     recognition.onend = () => {
       activeRef.current = false;
-      // Auto-restart if we didn't intentionally stop
-      if (recognitionRef.current === recognition) {
+      processedIndexRef.current = 0;
+      // Auto-restart if we still want to listen
+      if (wantListeningRef.current) {
         try {
           recognition.start();
         } catch {
           setState("idle");
         }
+      } else {
+        setState("idle");
       }
     };
 
@@ -72,9 +88,10 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
     } catch {
       setState("error");
     }
-  }, [onCommand]);
+  }, []);
 
   const stopListening = useCallback(() => {
+    wantListeningRef.current = false;
     if (recognitionRef.current) {
       recognitionRef.current.stop();
       recognitionRef.current = null;
@@ -84,8 +101,14 @@ export function useSpeechRecognition(onCommand: (transcript: string) => void) {
   }, []);
 
   useEffect(() => {
-    return () => stopListening();
-  }, [stopListening]);
+    return () => {
+      wantListeningRef.current = false;
+      if (recognitionRef.current) {
+        recognitionRef.current.stop();
+        recognitionRef.current = null;
+      }
+    };
+  }, []);
 
   return { state, startListening, stopListening, supported: !!SpeechRecognition };
 }
