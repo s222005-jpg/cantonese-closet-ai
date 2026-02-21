@@ -33,13 +33,13 @@ function analysisToSpeech(a: OutfitAnalysis): string {
 }
 
 export default function Index() {
-  const { videoRef, startCamera, capturePhoto } = useCamera();
+  const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
   const { speak, stop: stopSpeech, isSpeaking, warmUp: warmUpTTS } = useTTS();
   const haptics = useHaptics();
 
   const [appState, setAppState] = useState<AppState>("init");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState("撳螢幕任何位置開始");
+  const [statusText, setStatusText] = useState("撳下面嘅按鈕開始，或者講「開始」");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
@@ -49,15 +49,17 @@ export default function Index() {
   const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const cameraStartedRef = useRef(false);
 
+  // Refs so callbacks always see latest values
   const appStateRef = useRef<AppState>("init");
   const startFlowRef = useRef<() => void>(() => {});
   const handleFollowUpRef = useRef<(q: string) => void>(() => {});
 
-  // Voice command handler
+  // Voice command handler — uses refs to avoid stale closures
   const handleVoiceCommand = useCallback(
     (transcript: string) => {
       console.log("Voice command:", transcript);
 
+      // "開始" / "影相" triggers — works from any state where camera is ready
       if (
         transcript.includes("開始") ||
         transcript.includes("影相") ||
@@ -84,6 +86,7 @@ export default function Index() {
         speak(lastResult || "速度已調慢。", 0.7);
         return;
       }
+      // Follow-up questions
       if (
         transcript.includes("見工") ||
         transcript.includes("婚禮") ||
@@ -127,6 +130,7 @@ export default function Index() {
     }, 1000);
   }, [speak, stopSpeech, haptics]);
 
+  // Keep ref in sync
   useEffect(() => { startFlowRef.current = startFlow; }, [startFlow]);
 
   const doCapture = useCallback(async () => {
@@ -180,7 +184,7 @@ export default function Index() {
       speak(speechText, ttsRate, () => {
         setAppState("listening");
         appStateRef.current = "listening";
-        setStatusText("講「開始」重新分析，或者問問題");
+        setStatusText("講「再試一次」重新分析，或者問問題");
         startListening();
       });
     } catch (err) {
@@ -226,24 +230,27 @@ export default function Index() {
     [analysis, speak, stopSpeech, haptics, ttsRate]
   );
 
+  // Keep ref in sync
   useEffect(() => { handleFollowUpRef.current = handleFollowUp; }, [handleFollowUp]);
 
-  // Tap anywhere to start — accessible for blind users
+  // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
-    // Unlock TTS — must happen in user gesture context
+    // Unlock TTS on mobile — must happen in user gesture context
     warmUpTTS();
 
+    // Privacy notice (first launch only)
     if (!hasShownPrivacy.current) {
       const seen = localStorage.getItem("vw_privacy_seen");
       if (!seen) {
         localStorage.setItem("vw_privacy_seen", "1");
+        speak("你嘅相片只會用作穿搭分析，系統唔會儲存或分享。");
       }
       hasShownPrivacy.current = true;
     }
 
+    // Only start camera if not already active
     if (!cameraStartedRef.current) {
       setStatusText("正在啟動相機…");
-      speak("正在啟動相機同語音識別。");
       const ok = await startCamera();
       if (!ok) {
         setAppState("error");
@@ -253,6 +260,7 @@ export default function Index() {
         return;
       }
       cameraStartedRef.current = true;
+      // Also start voice recognition (user gesture covers this too)
       startListening();
     }
     startFlow();
@@ -282,12 +290,6 @@ export default function Index() {
       style={{ background: "hsl(var(--deep-blue-dark))" }}
       aria-live="polite"
       aria-atomic="true"
-      // In init state, the entire screen is tappable for accessibility
-      onClick={appState === "init" ? handleStart : undefined}
-      role={appState === "init" ? "button" : undefined}
-      tabIndex={appState === "init" ? 0 : undefined}
-      aria-label={appState === "init" ? "撳螢幕任何位置開始分析穿搭" : undefined}
-      onKeyDown={appState === "init" ? (e) => { if (e.key === "Enter" || e.key === " ") handleStart(); } : undefined}
     >
       {/* Camera feed */}
       <video
@@ -300,10 +302,10 @@ export default function Index() {
       />
 
       {/* Dark overlay */}
-      <div className="absolute inset-0 bg-background/70 pointer-events-none" />
+      <div className="absolute inset-0 bg-background/70" />
 
       {/* Top bar */}
-      <div className="relative z-10 w-full flex items-center justify-between px-6 pt-safe pt-6 pointer-events-none">
+      <div className="relative z-10 w-full flex items-center justify-between px-6 pt-safe pt-6">
         <span className="text-2xl font-bold tracking-widest text-white text-shadow-lg">聲著</span>
         <span className="text-sm text-muted-foreground">VoiceWear</span>
       </div>
@@ -369,16 +371,15 @@ export default function Index() {
           </div>
         )}
 
-        {/* Init state — full-screen tap instruction */}
+        {/* Init state — big start button */}
         {appState === "init" && (
-          <div className="mt-4 w-full max-w-xs py-8 rounded-2xl bg-accent/20 border-2 border-accent text-center pointer-events-none">
-            <p className="text-accent text-3xl font-bold tracking-wide">
-              撳螢幕開始
-            </p>
-            <p className="text-muted-foreground text-lg mt-2">
-              Tap anywhere to start
-            </p>
-          </div>
+          <button
+            onClick={handleStart}
+            className="mt-4 w-full max-w-xs py-6 rounded-2xl bg-accent text-accent-foreground text-2xl font-bold tracking-wide active:scale-95 transition-transform"
+            aria-label="撳呢度開始分析穿搭"
+          >
+            開始分析穿搭
+          </button>
         )}
 
         {/* Error state */}
@@ -386,7 +387,7 @@ export default function Index() {
           <div className="rounded-xl bg-destructive/20 border border-destructive/50 p-5 text-center">
             <p className="text-destructive text-xl">{errorMsg}</p>
             <button
-              onClick={(e) => { e.stopPropagation(); handleStart(); }}
+              onClick={handleStart}
               className="mt-4 py-3 px-8 rounded-xl bg-accent text-accent-foreground text-lg font-semibold active:scale-95 transition-transform"
             >
               再試一次
@@ -424,7 +425,7 @@ export default function Index() {
 
       {/* Speaking indicator */}
       {isSpeaking && (
-        <div className="absolute top-16 right-4 z-20 flex items-center gap-1 pointer-events-none">
+        <div className="absolute top-16 right-4 z-20 flex items-center gap-1">
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
