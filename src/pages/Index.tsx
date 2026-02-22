@@ -29,7 +29,7 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const CANTONESE_NUMBERS = ["五", "四", "三", "二", "一"];
 
 function analysisToSpeech(a: OutfitAnalysis): string {
-  return `你而家著緊${a.上身}，同${a.下身}。主要顏色係${a.顏色}。整體風格${a.風格}，${a.正式程度}風格。配搭評分${a.配搭評分}。${a.建議}`;
+  return `你而家著緊${a.上身}， 同${a.下身}。\n主要顏色係${a.顏色}。\n整體風格${a.風格}， ${a.正式程度}風格。\n配搭評分${a.配搭評分}。\n${a.建議}`;
 }
 
 export default function Index() {
@@ -42,7 +42,7 @@ export default function Index() {
   const [statusText, setStatusText] = useState("撳下面嘅按鈕開始，或者講「開始」");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [ttsRate, setTtsRate] = useState(1.0);
+  const [ttsRate, setTtsRate] = useState(0.85);
   const [lastResult, setLastResult] = useState<string>("");
 
   const hasShownPrivacy = useRef(false);
