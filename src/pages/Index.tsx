@@ -29,12 +29,12 @@ const PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const CANTONESE_NUMBERS = ["五", "四", "三", "二", "一"];
 
 function analysisToSpeech(a: OutfitAnalysis): string {
-  return `你而家著緊${a.上身}， 同${a.下身}。\n主要顏色係${a.顏色}。\n整體風格${a.風格}， ${a.正式程度}風格。\n配搭評分${a.配搭評分}。\n${a.建議}`;
+  return `你而家著緊${a.上身}，同${a.下身}。主要顏色係${a.顏色}。整體風格${a.風格}，${a.正式程度}風格。配搭評分${a.配搭評分}。${a.建議}`;
 }
 
 export default function Index() {
   const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
-  const { speak, stop: stopSpeech, isSpeaking, warmUp: warmUpTTS } = useTTS();
+  const { speak, stop: stopSpeech, isSpeaking } = useTTS();
   const haptics = useHaptics();
 
   const [appState, setAppState] = useState<AppState>("init");
@@ -42,7 +42,7 @@ export default function Index() {
   const [statusText, setStatusText] = useState("撳下面嘅按鈕開始，或者講「開始」");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [ttsRate, setTtsRate] = useState(0.75);
+  const [ttsRate, setTtsRate] = useState(1.0);
   const [lastResult, setLastResult] = useState<string>("");
 
   const hasShownPrivacy = useRef(false);
@@ -235,9 +235,6 @@ export default function Index() {
 
   // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
-    // Unlock TTS on mobile — must happen in user gesture context
-    warmUpTTS();
-
     // Privacy notice (first launch only)
     if (!hasShownPrivacy.current) {
       const seen = localStorage.getItem("vw_privacy_seen");
@@ -264,7 +261,7 @@ export default function Index() {
       startListening();
     }
     startFlow();
-  }, [startCamera, startFlow, speak, startListening, warmUpTTS]);
+  }, [startCamera, startFlow, speak, startListening]);
 
   // Cleanup
   useEffect(() => {
