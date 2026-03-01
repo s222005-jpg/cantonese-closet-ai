@@ -235,12 +235,26 @@ export default function Index() {
 
   // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
-    // Privacy notice (first launch only)
+    // If already in a flow (countdown, capturing, analyzing), ignore taps
+    const current = appStateRef.current;
+    if (current === "countdown" || current === "capturing" || current === "analyzing") {
+      return;
+    }
+
+    // Warm up TTS on first user gesture (required by mobile browsers)
     if (!hasShownPrivacy.current) {
+      // Silent utterance to unlock audio playback
+      const warmup = new SpeechSynthesisUtterance("");
+      warmup.volume = 0;
+      window.speechSynthesis.speak(warmup);
+
       const seen = localStorage.getItem("vw_privacy_seen");
       if (!seen) {
         localStorage.setItem("vw_privacy_seen", "1");
-        speak("你嘅相片只會用作穿搭分析，系統唔會儲存或分享。");
+        // Small delay so warmup utterance finishes first
+        setTimeout(() => {
+          speak("你嘅相片只會用作穿搭分析，系統唔會儲存或分享。");
+        }, 100);
       }
       hasShownPrivacy.current = true;
     }
@@ -257,7 +271,6 @@ export default function Index() {
         return;
       }
       cameraStartedRef.current = true;
-      // Also start voice recognition (user gesture covers this too)
       startListening();
     }
     startFlow();
