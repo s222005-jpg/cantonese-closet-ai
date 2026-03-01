@@ -319,8 +319,8 @@ export default function Index() {
 
       {/* Top bar */}
       <div className="relative z-10 w-full flex items-center justify-between px-6 pt-safe pt-6">
-        <span className="text-2xl font-bold tracking-widest text-white text-shadow-lg">聲著</span>
-        <span className="text-sm text-muted-foreground">VoiceWear</span>
+        <span className="text-2xl font-bold tracking-widest text-white text-shadow-lg">Quinton</span>
+        <span className="text-sm text-muted-foreground">穿搭分析</span>
       </div>
 
       {/* Main content */}
