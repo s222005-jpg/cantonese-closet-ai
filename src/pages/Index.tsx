@@ -39,7 +39,7 @@ export default function Index() {
 
   const [appState, setAppState] = useState<AppState>("init");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState("撳下面嘅按鈕開始，或者講「開始」");
+  const [statusText, setStatusText] = useState("撳螢幕任何地方開始");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
@@ -283,10 +283,13 @@ export default function Index() {
 
   return (
     <div
-      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden"
+      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden cursor-pointer"
       style={{ background: "hsl(var(--deep-blue-dark))" }}
       aria-live="polite"
       aria-atomic="true"
+      onClick={handleStart}
+      role="button"
+      aria-label="撳任何地方開始分析穿搭"
     >
       {/* Camera feed */}
       <video
