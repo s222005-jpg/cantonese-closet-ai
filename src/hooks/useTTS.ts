@@ -1,8 +1,26 @@
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 
 export function useTTS() {
   const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const cachedVoiceRef = useRef<SpeechSynthesisVoice | null>(null);
+
+  // Preload and cache the preferred voice as soon as voices are available
+  useEffect(() => {
+    const pickVoice = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length === 0) return;
+      const preferred =
+        voices.find((v) => v.lang === "zh-HK") ||
+        voices.find((v) => v.lang === "zh-TW") ||
+        voices.find((v) => v.lang.startsWith("zh"));
+      if (preferred) cachedVoiceRef.current = preferred;
+    };
+
+    pickVoice();
+    window.speechSynthesis.addEventListener("voiceschanged", pickVoice);
+    return () => window.speechSynthesis.removeEventListener("voiceschanged", pickVoice);
+  }, []);
 
   const speak = useCallback((text: string, rate = 1.0, onEnd?: () => void) => {
     window.speechSynthesis.cancel();
@@ -12,12 +30,7 @@ export function useTTS() {
     utterance.pitch = 1.05;
     utterance.volume = 1.0;
 
-    // Try to pick a zh-HK / zh-TW voice
-    const voices = window.speechSynthesis.getVoices();
-    const preferred = voices.find(
-      (v) => v.lang === "zh-HK" || v.lang === "zh-TW" || v.lang.startsWith("zh")
-    );
-    if (preferred) utterance.voice = preferred;
+    if (cachedVoiceRef.current) utterance.voice = cachedVoiceRef.current;
 
     utterance.onstart = () => setIsSpeaking(true);
     utterance.onend = () => {
