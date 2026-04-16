@@ -83,7 +83,7 @@ serve(async (req) => {
             ],
           },
         ],
-        max_tokens: 1024,
+        max_tokens: 4096,
       }),
     });
 
