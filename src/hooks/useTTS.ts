@@ -8,8 +8,8 @@ export function useTTS() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = "zh-HK";
-    utterance.rate = rate;
-    utterance.pitch = 1.0;
+    utterance.rate = rate * 0.85;
+    utterance.pitch = 1.05;
     utterance.volume = 1.0;
 
     // Try to pick a zh-HK / zh-TW voice

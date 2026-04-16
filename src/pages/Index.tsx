@@ -318,10 +318,7 @@ export default function Index() {
       <div className="absolute inset-0 bg-background/70" />
 
       {/* Top bar */}
-      <div className="relative z-10 w-full flex items-center justify-between px-6 pt-safe pt-6">
-        <span className="text-2xl font-bold tracking-widest text-white text-shadow-lg">Quinton</span>
-        <span className="text-sm text-muted-foreground">穿搭分析</span>
-      </div>
+      <div className="relative z-10 w-full h-12" />
 
       {/* Main content */}
       <div className="relative z-10 flex flex-col items-center justify-center flex-1 px-6 w-full max-w-lg">
