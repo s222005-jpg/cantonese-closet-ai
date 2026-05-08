@@ -217,6 +217,10 @@ export default function Index() {
     startListening();
   }, [stopSpeech, haptics, startListening]);
 
+  // Keep refs in sync
+  useEffect(() => { handlePauseRef.current = handlePause; }, [handlePause]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+
   const handleFollowUp = useCallback(
     async (question: string) => {
       stopSpeech();
