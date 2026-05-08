@@ -391,6 +391,17 @@ export default function Index() {
           </div>
         )}
 
+        {/* Pause button — visible while AI is speaking */}
+        {isSpeaking && (
+          <button
+            onClick={handlePause}
+            className="mt-4 w-full max-w-xs py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide active:scale-95 transition-transform"
+            aria-label="暫停語音"
+          >
+            ⏸ 暫停
+          </button>
+        )}
+
         {/* Init state — big start button */}
         {appState === "init" && (
           <button
