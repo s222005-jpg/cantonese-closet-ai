@@ -53,6 +53,8 @@ export default function Index() {
   const appStateRef = useRef<AppState>("init");
   const startFlowRef = useRef<() => void>(() => {});
   const handleFollowUpRef = useRef<(q: string) => void>(() => {});
+  const handlePauseRef = useRef<() => void>(() => {});
+  const isSpeakingRef = useRef(false);
 
   // Voice command handler — uses refs to avoid stale closures
   const handleVoiceCommand = useCallback(
@@ -73,8 +75,17 @@ export default function Index() {
         return;
       }
 
-      if (transcript.includes("停止")) {
-        stopSpeech();
+      // Pause/stop commands — only meaningful while AI is speaking
+      if (
+        transcript.includes("停止") ||
+        transcript.includes("停") ||
+        transcript.includes("暫停") ||
+        transcript.includes("收聲") ||
+        transcript.includes("唔好講")
+      ) {
+        if (isSpeakingRef.current) {
+          handlePauseRef.current();
+        }
         return;
       }
       if (transcript.includes("重複") && lastResult) {
@@ -205,6 +216,10 @@ export default function Index() {
     setStatusText("講「再試一次」重新分析，或者問問題");
     startListening();
   }, [stopSpeech, haptics, startListening]);
+
+  // Keep refs in sync
+  useEffect(() => { handlePauseRef.current = handlePause; }, [handlePause]);
+  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
 
   const handleFollowUp = useCallback(
     async (question: string) => {
@@ -391,16 +406,7 @@ export default function Index() {
           </div>
         )}
 
-        {/* Pause button — visible while AI is speaking */}
-        {isSpeaking && (
-          <button
-            onClick={handlePause}
-            className="mt-4 w-full max-w-xs py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide active:scale-95 transition-transform"
-            aria-label="暫停語音"
-          >
-            ⏸ 暫停
-          </button>
-        )}
+        {/* Pause button rendered at root level below */}
 
         {/* Init state — big start button */}
         {appState === "init" && (
@@ -453,6 +459,17 @@ export default function Index() {
           </p>
         )}
       </div>
+
+      {/* Floating pause button — always visible while AI is speaking */}
+      {isSpeaking && (
+        <button
+          onClick={handlePause}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[88%] max-w-sm py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide shadow-2xl active:scale-95 transition-transform border-4 border-destructive-foreground/20"
+          aria-label="暫停語音 — 或者講停止"
+        >
+          ⏸ 暫停（或講「停止」）
+        </button>
+      )}
 
       {/* Speaking indicator */}
       {isSpeaking && (
