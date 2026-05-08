@@ -460,6 +460,17 @@ export default function Index() {
         )}
       </div>
 
+      {/* Floating pause button — always visible while AI is speaking */}
+      {isSpeaking && (
+        <button
+          onClick={handlePause}
+          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[88%] max-w-sm py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide shadow-2xl active:scale-95 transition-transform border-4 border-destructive-foreground/20"
+          aria-label="暫停語音 — 或者講停止"
+        >
+          ⏸ 暫停（或講「停止」）
+        </button>
+      )}
+
       {/* Speaking indicator */}
       {isSpeaking && (
         <div className="absolute top-16 right-4 z-20 flex items-center gap-1">
