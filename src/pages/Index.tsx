@@ -196,6 +196,16 @@ export default function Index() {
     }
   }, [capturePhoto, speak, haptics, ttsRate, startListening]);
 
+  const handlePause = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    stopSpeech();
+    haptics.onCameraActive();
+    setAppState("listening");
+    appStateRef.current = "listening";
+    setStatusText("講「再試一次」重新分析，或者問問題");
+    startListening();
+  }, [stopSpeech, haptics, startListening]);
+
   const handleFollowUp = useCallback(
     async (question: string) => {
       stopSpeech();
@@ -379,6 +389,17 @@ export default function Index() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* Pause button — visible while AI is speaking */}
+        {isSpeaking && (
+          <button
+            onClick={handlePause}
+            className="mt-4 w-full max-w-xs py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide active:scale-95 transition-transform"
+            aria-label="暫停語音"
+          >
+            ⏸ 暫停
+          </button>
         )}
 
         {/* Init state — big start button */}
