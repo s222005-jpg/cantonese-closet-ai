@@ -196,6 +196,16 @@ export default function Index() {
     }
   }, [capturePhoto, speak, haptics, ttsRate, startListening]);
 
+  const handlePause = useCallback((e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    stopSpeech();
+    haptics.onCameraActive();
+    setAppState("listening");
+    appStateRef.current = "listening";
+    setStatusText("講「再試一次」重新分析，或者問問題");
+    startListening();
+  }, [stopSpeech, haptics, startListening]);
+
   const handleFollowUp = useCallback(
     async (question: string) => {
       stopSpeech();
