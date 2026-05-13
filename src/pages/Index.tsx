@@ -260,11 +260,13 @@ export default function Index() {
 
   // User-gesture-driven start — required for camera access on mobile browsers
   const handleStart = useCallback(async () => {
-    // If already in a flow (countdown, capturing, analyzing), ignore taps
+    // If already in a flow (countdown, capturing, analyzing), ignore
     const current = appStateRef.current;
     if (current === "countdown" || current === "capturing" || current === "analyzing") {
       return;
     }
+
+    stopSpeech();
 
     // Warm up TTS on first user gesture (required by mobile browsers)
     if (!hasShownPrivacy.current) {
@@ -296,10 +298,15 @@ export default function Index() {
         return;
       }
       cameraStartedRef.current = true;
-      startListening();
     }
-    startFlow();
-  }, [startCamera, startFlow, speak, startListening]);
+
+    // Transition to listening — user says "開始" to trigger the photo flow
+    setAppState("listening");
+    appStateRef.current = "listening";
+    setStatusText("講「開始」拍照，或者問問題");
+    startListening();
+    speak("講「開始」就可以拍照。");
+  }, [startCamera, speak, startListening, stopSpeech]);
 
   // Cleanup
   useEffect(() => {
@@ -321,13 +328,11 @@ export default function Index() {
 
   return (
     <div
-      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden cursor-pointer"
+      className="relative w-full h-full flex flex-col items-center justify-between overflow-hidden"
       style={{ background: "hsl(var(--deep-blue-dark))" }}
       aria-live="polite"
       aria-atomic="true"
-      onClick={handleStart}
-      role="button"
-      aria-label="撳任何地方開始分析穿搭"
+      aria-label="Quinton 穿搭分析"
     >
       {/* Camera feed */}
       <video
