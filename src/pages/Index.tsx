@@ -442,7 +442,7 @@ export default function Index() {
             </button>
             <p className="text-muted-foreground text-base text-center mb-2">或者講：</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {["「開始」", "「重複」", "「講慢啲」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
+              {["「開始」", "「重複」", "「講慢啲」", "「適唔適合見工？」"].map((cmd) => (
                 <span key={cmd} className="text-sm text-foreground bg-secondary/60 rounded-full px-3 py-1">
                   {cmd}
                 </span>
