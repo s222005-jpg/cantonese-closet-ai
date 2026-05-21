@@ -53,8 +53,6 @@ export default function Index() {
   const appStateRef = useRef<AppState>("init");
   const startFlowRef = useRef<() => void>(() => {});
   const handleFollowUpRef = useRef<(q: string) => void>(() => {});
-  const handlePauseRef = useRef<() => void>(() => {});
-  const isSpeakingRef = useRef(false);
 
   // Voice command handler — uses refs to avoid stale closures
   const handleVoiceCommand = useCallback(
@@ -75,19 +73,6 @@ export default function Index() {
         return;
       }
 
-      // Pause/stop commands — only meaningful while AI is speaking
-      if (
-        transcript.includes("停止") ||
-        transcript.includes("停") ||
-        transcript.includes("暫停") ||
-        transcript.includes("收聲") ||
-        transcript.includes("唔好講")
-      ) {
-        if (isSpeakingRef.current) {
-          handlePauseRef.current();
-        }
-        return;
-      }
       if (transcript.includes("重複") && lastResult) {
         speak(lastResult, ttsRate);
         return;
@@ -207,19 +192,8 @@ export default function Index() {
     }
   }, [capturePhoto, speak, haptics, ttsRate, startListening]);
 
-  const handlePause = useCallback((e?: React.MouseEvent) => {
-    e?.stopPropagation();
-    stopSpeech();
-    haptics.onCameraActive();
-    setAppState("listening");
-    appStateRef.current = "listening";
-    setStatusText("講「再試一次」重新分析，或者問問題");
-    startListening();
-  }, [stopSpeech, haptics, startListening]);
 
-  // Keep refs in sync
-  useEffect(() => { handlePauseRef.current = handlePause; }, [handlePause]);
-  useEffect(() => { isSpeakingRef.current = isSpeaking; }, [isSpeaking]);
+
 
   const handleFollowUp = useCallback(
     async (question: string) => {
@@ -300,13 +274,9 @@ export default function Index() {
       cameraStartedRef.current = true;
     }
 
-    // Transition to listening — user says "開始" to trigger the photo flow
-    setAppState("listening");
-    appStateRef.current = "listening";
-    setStatusText("講「開始」拍照，或者問問題");
-    startListening();
-    speak("講「開始」就可以拍照。");
-  }, [startCamera, speak, startListening, stopSpeech]);
+    // Immediately start the photo countdown
+    startFlow();
+  }, [startCamera, speak, stopSpeech, startFlow]);
 
   // Cleanup
   useEffect(() => {
@@ -323,16 +293,10 @@ export default function Index() {
       e.preventDefault();
       console.log("Key trigger:", e.key, "state:", appStateRef.current);
       const current = appStateRef.current;
-      if (isSpeakingRef.current) {
-        handlePauseRef.current();
-        return;
-      }
-      if (current === "init" || current === "error") {
-        handleStart();
-      } else if (current === "listening" || current === "result") {
-        if (cameraStartedRef.current) startFlowRef.current();
-        else handleStart();
-      }
+      if (current === "countdown" || current === "capturing" || current === "analyzing") return;
+      // Immediately start photo flow if camera is ready, else initialize first then start
+      handleStart();
+
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("keydown", onKey);
@@ -478,7 +442,7 @@ export default function Index() {
             </button>
             <p className="text-muted-foreground text-base text-center mb-2">或者講：</p>
             <div className="flex flex-wrap justify-center gap-2">
-              {["「開始」", "「重複」", "「講慢啲」", "「適唔適合見工？」", "「停止」"].map((cmd) => (
+              {["「開始」", "「重複」", "「講慢啲」", "「適唔適合見工？」"].map((cmd) => (
                 <span key={cmd} className="text-sm text-foreground bg-secondary/60 rounded-full px-3 py-1">
                   {cmd}
                 </span>
@@ -493,16 +457,6 @@ export default function Index() {
         )}
       </div>
 
-      {/* Floating pause button — always visible while AI is speaking */}
-      {isSpeaking && (
-        <button
-          onClick={handlePause}
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[88%] max-w-sm py-6 rounded-2xl bg-destructive text-destructive-foreground text-2xl font-bold tracking-wide shadow-2xl active:scale-95 transition-transform border-4 border-destructive-foreground/20"
-          aria-label="暫停語音 — 或者講停止"
-        >
-          ⏸ 暫停（或講「停止」）
-        </button>
-      )}
 
       {/* Speaking indicator */}
       {isSpeaking && (
