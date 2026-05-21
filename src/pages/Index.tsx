@@ -53,8 +53,6 @@ export default function Index() {
   const appStateRef = useRef<AppState>("init");
   const startFlowRef = useRef<() => void>(() => {});
   const handleFollowUpRef = useRef<(q: string) => void>(() => {});
-  const handlePauseRef = useRef<() => void>(() => {});
-  const isSpeakingRef = useRef(false);
 
   // Voice command handler — uses refs to avoid stale closures
   const handleVoiceCommand = useCallback(
