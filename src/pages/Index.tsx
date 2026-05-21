@@ -274,13 +274,9 @@ export default function Index() {
       cameraStartedRef.current = true;
     }
 
-    // Transition to listening — user says "開始" to trigger the photo flow
-    setAppState("listening");
-    appStateRef.current = "listening";
-    setStatusText("講「開始」拍照，或者問問題");
-    startListening();
-    speak("講「開始」就可以拍照。");
-  }, [startCamera, speak, startListening, stopSpeech]);
+    // Immediately start the photo countdown
+    startFlow();
+  }, [startCamera, speak, stopSpeech]);
 
   // Cleanup
   useEffect(() => {
