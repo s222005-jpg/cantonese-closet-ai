@@ -75,19 +75,6 @@ export default function Index() {
         return;
       }
 
-      // Pause/stop commands — only meaningful while AI is speaking
-      if (
-        transcript.includes("停止") ||
-        transcript.includes("停") ||
-        transcript.includes("暫停") ||
-        transcript.includes("收聲") ||
-        transcript.includes("唔好講")
-      ) {
-        if (isSpeakingRef.current) {
-          handlePauseRef.current();
-        }
-        return;
-      }
       if (transcript.includes("重複") && lastResult) {
         speak(lastResult, ttsRate);
         return;
