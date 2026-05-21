@@ -33,7 +33,7 @@ function analysisToSpeech(a: OutfitAnalysis): string {
 }
 
 export default function Index() {
-  const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
+  const { videoRef, cameraState, error: cameraError, startCamera, capturePhoto } = useCamera();
   const { speak, stop: stopSpeech, isSpeaking } = useTTS();
   const haptics = useHaptics();
 
@@ -267,8 +267,10 @@ export default function Index() {
       if (!ok) {
         setAppState("error");
         appStateRef.current = "error";
+        const detail = cameraError || "請檢查瀏覽器相機權限，或喺新分頁開啟此網站。";
+        setErrorMsg(`無法開啟相機：${detail}`);
         setStatusText("無法開啟相機");
-        speak("無法開啟相機，請檢查權限。");
+        speak("無法開啟相機，請檢查權限，或者喺新分頁打開。");
         return;
       }
       cameraStartedRef.current = true;
@@ -276,7 +278,7 @@ export default function Index() {
 
     // Immediately start the photo countdown
     startFlow();
-  }, [startCamera, speak, stopSpeech, startFlow]);
+  }, [startCamera, speak, stopSpeech, startFlow, cameraError]);
 
   // Cleanup
   useEffect(() => {
