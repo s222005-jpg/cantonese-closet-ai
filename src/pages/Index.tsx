@@ -39,7 +39,7 @@ export default function Index() {
 
   const [appState, setAppState] = useState<AppState>("init");
   const [countdown, setCountdown] = useState<number | null>(null);
-  const [statusText, setStatusText] = useState("撳螢幕任何地方開始");
+  const [statusText, setStatusText] = useState("撳 Enter 開始");
   const [analysis, setAnalysis] = useState<OutfitAnalysis | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [ttsRate, setTtsRate] = useState(1.0);
