@@ -297,16 +297,10 @@ export default function Index() {
       e.preventDefault();
       console.log("Key trigger:", e.key, "state:", appStateRef.current);
       const current = appStateRef.current;
-      if (isSpeakingRef.current) {
-        handlePauseRef.current();
-        return;
-      }
-      if (current === "init" || current === "error") {
-        handleStart();
-      } else if (current === "listening" || current === "result") {
-        if (cameraStartedRef.current) startFlowRef.current();
-        else handleStart();
-      }
+      if (current === "countdown" || current === "capturing" || current === "analyzing") return;
+      // Immediately start photo flow if camera is ready, else initialize first then start
+      handleStart();
+
     };
     window.addEventListener("keydown", onKey);
     document.addEventListener("keydown", onKey);
