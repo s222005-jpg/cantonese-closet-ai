@@ -278,7 +278,7 @@ export default function Index() {
 
     // Immediately start the photo countdown
     startFlow();
-  }, [startCamera, speak, stopSpeech, startFlow]);
+  }, [startCamera, speak, stopSpeech, startFlow, cameraError]);
 
   // Cleanup
   useEffect(() => {
