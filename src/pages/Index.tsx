@@ -316,6 +316,27 @@ export default function Index() {
     };
   }, [stopListening]);
 
+  // Enter key trigger — for laptop users
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const current = appStateRef.current;
+      if (isSpeakingRef.current) {
+        handlePauseRef.current();
+        return;
+      }
+      if (current === "init" || current === "error") {
+        handleStart();
+      } else if (current === "listening" || current === "result") {
+        if (cameraStartedRef.current) startFlowRef.current();
+        else handleStart();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [handleStart]);
+
   const stateColor: Record<AppState, string> = {
     init: "text-white",
     countdown: "glow-white text-white",
