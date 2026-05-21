@@ -319,8 +319,9 @@ export default function Index() {
   // Enter key trigger — for laptop users
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key !== "Enter") return;
+      if (e.key !== "Enter" && e.key !== " " && e.code !== "Space") return;
       e.preventDefault();
+      console.log("Key trigger:", e.key, "state:", appStateRef.current);
       const current = appStateRef.current;
       if (isSpeakingRef.current) {
         handlePauseRef.current();
@@ -334,7 +335,13 @@ export default function Index() {
       }
     };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("keydown", onKey);
+    // Focus window so keys are captured even inside an iframe preview
+    try { window.focus(); } catch { /* noop */ }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [handleStart]);
 
   const stateColor: Record<AppState, string> = {
