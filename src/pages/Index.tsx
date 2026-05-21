@@ -33,7 +33,7 @@ function analysisToSpeech(a: OutfitAnalysis): string {
 }
 
 export default function Index() {
-  const { videoRef, cameraState, startCamera, capturePhoto } = useCamera();
+  const { videoRef, cameraState, error: cameraError, startCamera, capturePhoto } = useCamera();
   const { speak, stop: stopSpeech, isSpeaking } = useTTS();
   const haptics = useHaptics();
 
